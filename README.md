@@ -23,8 +23,8 @@
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/schemasense-ai.git
-cd schemasense-ai
+git clone https://github.com/KatkamKoushik/neural-nexus-schemasense.git
+cd neural-nexus-schemasense
 pip install -r requirements.txt
 ```
 
