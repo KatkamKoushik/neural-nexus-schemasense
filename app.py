@@ -183,7 +183,11 @@ with st.sidebar:
     st.divider()
 
     st.subheader("⚙️ AI Engine")
-    selected_model = st.selectbox("Gemini Model:", ["gemini-2.5-flash", "gemini-2.5-pro"])
+    selected_model = st.selectbox("Gemini Model:", [
+        "gemini-3-flash-preview", 
+        "gemini-2.5-pro", 
+        "gemini-2.5-flash"
+    ])
 
     st.divider()
     st.subheader("🔌 Live Database Connection")
