@@ -967,8 +967,10 @@ with tab4:
     _using_postgres = (data_source == "Built-in: Olist E-Commerce")
     _sql_hint = "PostgreSQL" if _using_postgres else "SQLite"
 
-    st.title("📊 Visual Analytics Engine")
-    st.write(f"Execute SQL against the **{_sql_hint}** database. Queries are auto-detected from the chat.")
+    # Force a clear vertical break to stop the overlap
+    st.markdown("### 📊 Visual Analytics Engine")
+    st.caption(f"Connected to: **{_sql_hint}** Database · Auto-detecting SQL from Chat")
+    st.write("") # Extra padding
 
     # ── Branch: Olist PostgreSQL vs CSV SQLite ──
     if _using_postgres:
@@ -982,8 +984,8 @@ with tab4:
             if pg_conn_error:
                 st.code(pg_conn_error, language=None)
         else:
-            # Show Olist table reference
-            with st.expander('📊 Data Schema Details', expanded=False):
+            # Use a clean string to prevent rendering collisions
+            with st.expander("Database Schema Reference", expanded=False):
                 st.markdown('''
 * **olist_orders_dataset** — order_id, customer_id, order_status, order_purchase_timestamp...
 * **olist_order_items_dataset** — order_id, product_id, seller_id, price, freight_value...
