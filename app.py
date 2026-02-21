@@ -1,4 +1,9 @@
 import streamlit as st
+try:
+    import PyPDF2
+    _PYPDF2_AVAILABLE = True
+except ImportError:
+    _PYPDF2_AVAILABLE = False
 import google.generativeai as genai
 import pandas as pd
 import plotly.express as px
@@ -7,11 +12,6 @@ import sqlite3
 import re
 from io import StringIO
 import streamlit.components.v1 as components
-try:
-    import PyPDF2
-    _PYPDF2_AVAILABLE = True
-except ImportError:
-    _PYPDF2_AVAILABLE = False
 
 # ──────────────────────────────────────────────
 # INITIAL CONFIGURATION
@@ -464,119 +464,122 @@ with st.sidebar:
     st.divider()
 
     # ── Data Source ──
-    st.subheader("🔌 Data Source")
-    data_source = st.radio(
-        "Select Source:",
-        ["Built-in: Olist E-Commerce", "Upload Custom Dataset"],
-    )
-
-    custom_schema_context = ""
-
-    if data_source == "Upload Custom Dataset":
-        # FEATURE 2: accept_multiple_files=True
-        uploaded_files = st.file_uploader(
-            "Upload CSV files (multiple allowed)",
-            type=["csv"],
-            accept_multiple_files=True,
+    with st.sidebar.container():
+        st.subheader("🔌 Data Source")
+        data_source = st.radio(
+            "Select Source:",
+            ["Built-in: Olist E-Commerce", "Upload Custom Dataset"],
         )
-
-        if uploaded_files:
-            # Load into SQLite in-memory DB
-            conn, schema_info = load_csvs_into_sqlite(uploaded_files)
-            st.session_state.sqlite_conn = conn
-            st.session_state.sqlite_schema = schema_info
-
-            # For backward compat: store the first file's df for the column profiler
-            first_file = uploaded_files[0]
-            first_file.seek(0)
-            df_first = pd.read_csv(first_file)
-            st.session_state.uploaded_df = df_first
-            meta = extract_schema_metadata(df_first)
-            st.session_state.uploaded_meta = meta
-
-            # Build schema context for the AI
-            multi_table_info = []
-            for fname, cols in schema_info.items():
-                multi_table_info.append(f"Table `{fname}`: columns = [{', '.join(cols)}]")
-
-            custom_schema_context = (
-                f"The user uploaded {len(uploaded_files)} CSV file(s) loaded into a SQLite in-memory database.\n"
-                + "\n".join(multi_table_info)
-                + f"\nFirst file sample rows: {df_first.head(3).to_json(orient='records')}"
-            )
-
-            # Sidebar schema summary
-            st.markdown('<span class="status-badge">Schema Ingested</span>', unsafe_allow_html=True)
-            if len(uploaded_files) > 1:
-                st.caption(f"📦 {len(uploaded_files)} tables loaded into SQLite")
-                for tname, cols in schema_info.items():
-                    with st.expander(f"📋 {tname} ({len(cols)} cols)"):
-                        st.code(", ".join(cols), language=None)
-            else:
-                st.markdown(render_schema_table_html(meta), unsafe_allow_html=True)
-        else:
-            st.info("Upload one or more CSVs to begin analysis.")
-            st.session_state.sqlite_conn = None
-            st.session_state.sqlite_schema = {}
-    else:
-        # ── Live PostgreSQL connection status ──
-        if pg_conn is not None:
-            st.success("🟢 **Connected** · Olist PostgreSQL · Cloud SQL", icon=None)
-            st.caption("Live database · 9 tables · queries cached 10 min")
-        else:
-            st.error("🔴 **DB Unavailable** · Could not connect to PostgreSQL")
-            if pg_conn_error:
-                with st.expander("Connection error details"):
-                    st.code(pg_conn_error, language=None)
-
-    st.divider()
-
-    # ── Business Rules PDF Uploader ──
-    st.subheader("📄 Business Rules")
-    pdf_file = st.file_uploader('Upload Business Rules (PDF)', type=['pdf'], key='biz_rules')
     
-    business_context = ""
-    if st.session_state.biz_rules is not None:
-        if _PYPDF2_AVAILABLE:
-            try:
-                pdf_reader = PyPDF2.PdfReader(st.session_state.biz_rules)
-                pages_text = []
-                for page in pdf_reader.pages:
-                    pages_text.append(page.extract_text() or "")
-                business_context = "\n".join(pages_text).strip()
-                if business_context:
-                    st.success(f"✅ PDF ingested · {len(pdf_reader.pages)} page(s) · {len(business_context):,} chars")
+        custom_schema_context = ""
+    
+        if data_source == "Upload Custom Dataset":
+            # FEATURE 2: accept_multiple_files=True
+            uploaded_files = st.file_uploader(
+                "Upload CSV files (multiple allowed)",
+                type=["csv"],
+                accept_multiple_files=True,
+            )
+    
+            if uploaded_files:
+                # Load into SQLite in-memory DB
+                conn, schema_info = load_csvs_into_sqlite(uploaded_files)
+                st.session_state.sqlite_conn = conn
+                st.session_state.sqlite_schema = schema_info
+    
+                # For backward compat: store the first file's df for the column profiler
+                first_file = uploaded_files[0]
+                first_file.seek(0)
+                df_first = pd.read_csv(first_file)
+                st.session_state.uploaded_df = df_first
+                meta = extract_schema_metadata(df_first)
+                st.session_state.uploaded_meta = meta
+    
+                # Build schema context for the AI
+                multi_table_info = []
+                for fname, cols in schema_info.items():
+                    multi_table_info.append(f"Table `{fname}`: columns = [{', '.join(cols)}]")
+    
+                custom_schema_context = (
+                    f"The user uploaded {len(uploaded_files)} CSV file(s) loaded into a SQLite in-memory database.\n"
+                    + "\n".join(multi_table_info)
+                    + f"\nFirst file sample rows: {df_first.head(3).to_json(orient='records')}"
+                )
+    
+                # Sidebar schema summary
+                st.markdown('<span class="status-badge">Schema Ingested</span>', unsafe_allow_html=True)
+                if len(uploaded_files) > 1:
+                    st.caption(f"📦 {len(uploaded_files)} tables loaded into SQLite")
+                    for tname, cols in schema_info.items():
+                        with st.expander(f"📋 {tname} ({len(cols)} cols)"):
+                            st.code(", ".join(cols), language=None)
                 else:
-                    st.warning("⚠️ PDF uploaded but no text could be extracted (may be image-based).")
-            except Exception as _pdf_err:
-                st.error(f"❌ PDF read error: {_pdf_err}")
+                    st.markdown(render_schema_table_html(meta), unsafe_allow_html=True)
+            else:
+                st.info("Upload one or more CSVs to begin analysis.")
+                st.session_state.sqlite_conn = None
+                st.session_state.sqlite_schema = {}
         else:
-            st.error("❌ PyPDF2 not installed. Add `PyPDF2` to requirements.txt and redeploy.")
+            # ── Live PostgreSQL connection status ──
+            if pg_conn is not None:
+                st.success("🟢 **Connected** · Olist PostgreSQL · Cloud SQL", icon=None)
+                st.caption("Live database · 9 tables · queries cached 10 min")
+            else:
+                st.error("🔴 **DB Unavailable** · Could not connect to PostgreSQL")
+                if pg_conn_error:
+                    with st.expander("Connection error details"):
+                        st.code(pg_conn_error, language=None)
+    
+        st.divider()
+    
+        # ── Business Rules PDF Uploader ──
+        st.subheader("📄 Business Rules")
+        pdf_file = st.file_uploader('Upload Business Rules (PDF)', type=['pdf'], key='biz_rules')
+        
+        business_context = ""
+        if st.session_state.biz_rules is not None:
+            if _PYPDF2_AVAILABLE:
+                try:
+                    pdf_reader = PyPDF2.PdfReader(st.session_state.biz_rules)
+                    pages_text = []
+                    for page in pdf_reader.pages:
+                        pages_text.append(page.extract_text() or "")
+                    business_context = "\n".join(pages_text).strip()
+                    if business_context:
+                        st.success(f"✅ PDF ingested · {len(pdf_reader.pages)} page(s) · {len(business_context):,} chars")
+                    else:
+                        st.warning("⚠️ PDF uploaded but no text could be extracted (may be image-based).")
+                except Exception as _pdf_err:
+                    business_context = "PDF attached, but text extraction skipped."
+                    st.warning("⚠️ PDF attached, but text extraction skipped.")
+            else:
+                st.error("❌ PyPDF2 not installed. Add `PyPDF2` to requirements.txt and redeploy.")
     
     st.divider()
 
     # ── Actions ──
-    st.subheader("⚡ Actions")
-
-    dict_meta = st.session_state.uploaded_meta if data_source == "Upload Custom Dataset" else None
-    dict_json = build_data_dictionary_json(data_source, dict_meta)
-    st.download_button(
-        label="📥 Download Data Dictionary",
-        file_name="schemasense_data_dictionary.json",
-        mime="application/json",
-        data=dict_json,
-        use_container_width=True,
-    )
-
-    if st.button("🗑️ Clear Conversation", use_container_width=True):
-        st.session_state.messages = [
-            {
-                "role": "assistant",
-                "content": "👋 Conversation cleared. How can I help?",
-            }
-        ]
-        st.session_state.last_sql = None
-        st.rerun()
+    with st.sidebar.container():
+        st.subheader("⚡ Actions")
+    
+        dict_meta = st.session_state.uploaded_meta if data_source == "Upload Custom Dataset" else None
+        dict_json = build_data_dictionary_json(data_source, dict_meta)
+        st.download_button(
+            label="📥 Download Data Dictionary",
+            file_name="schemasense_data_dictionary.json",
+            mime="application/json",
+            data=dict_json,
+            use_container_width=True,
+        )
+    
+        if st.button("🗑️ Clear Conversation", use_container_width=True):
+            st.session_state.messages = [
+                {
+                    "role": "assistant",
+                    "content": "👋 Conversation cleared. How can I help?",
+                }
+            ]
+            st.session_state.last_sql = None
+            st.rerun()
 
 
 # ──────────────────────────────────────────────
@@ -792,7 +795,8 @@ with tab2:
     SELLERS ||--o{ ORDER_ITEMS : fulfills
     GEOLOCATION }o--|| CUSTOMERS : locates
     CATEGORY_TRANSLATION ||--|| PRODUCTS : translates'''
-            st.markdown(f'```mermaid\n{mermaid_code}\n```')
+            with st.container():
+                st.markdown(f'```mermaid\n{mermaid_code}\n```')
         else:
             if st.session_state.uploaded_meta:
                 st.markdown(
@@ -990,7 +994,7 @@ with tab4:
                 st.code(pg_conn_error, language=None)
         else:
             # Show Olist table reference
-            with st.expander('Database Schema Overview'):
+            with st.expander('📊 Data Schema Details', expanded=False):
                 st.markdown('''
 * **olist_orders_dataset** — order_id, customer_id, order_status, order_purchase_timestamp...
 * **olist_order_items_dataset** — order_id, product_id, seller_id, price, freight_value...
