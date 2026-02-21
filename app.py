@@ -357,7 +357,7 @@ def render_schema_table_html(meta: dict) -> str:
 
 
 # ──────────────────────────────────────────────
-# FEATURE 3 – SQL EXTRACTION HELPER
+# FEATURE 3 – SQL EXTRACTION HELPER & GUARDRAILS
 # ──────────────────────────────────────────────
 def extract_sql_from_response(text: str) -> str | None:
     """
@@ -381,6 +381,20 @@ def extract_sql_from_response(text: str) -> str | None:
         return match.group(1).strip()
 
     return None
+
+def is_safe_query(query: str) -> bool:
+    """Basic guardrail to prevent destructive SQL operations via regex keyword matching."""
+    forbidden_keywords = [
+        "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE",
+        "GRANT", "REVOKE", "REPLACE", "CREATE", "EXEC", "MERGE"
+    ]
+    query_upper = query.upper()
+    
+    # Look for whole word matches to avoid false positives (e.g., 'UPDATE' vs 'LAST_UPDATED_AT')
+    for keyword in forbidden_keywords:
+        if re.search(rf'\b{keyword}\b', query_upper):
+            return False
+    return True
 
 
 # ──────────────────────────────────────────────
@@ -475,7 +489,7 @@ with st.sidebar:
         st.caption("1. Upload your CSV Datasets:")
         uploaded_files = st.file_uploader(
             "Upload CSV files",
-            type=["csv"], # <-- This is what hid your PDF previously
+            type=["csv"], 
             accept_multiple_files=True,
             key="csv_uploader",
             label_visibility="collapsed"
@@ -651,7 +665,7 @@ st.markdown(
 )
 
 # ──────────────────────────────────────────────
-# TABS  ← added Visual Analytics tab
+# TABS
 # ──────────────────────────────────────────────
 tab1, tab2, tab3, tab4 = st.tabs(
     ["💬 Data Steward Chat", "📊 Schema Map & Quality", "📈 Column Profiler", "📊 Visual Analytics"]
@@ -963,7 +977,7 @@ with tab3:
 
 
 # ═══════════════════════════════════════════════
-# TAB 4 – VISUAL ANALYTICS ENGINE  (FEATURE 3)
+# TAB 4 – VISUAL ANALYTICS ENGINE  (GUARDED)
 # Dual-mode: PostgreSQL (Olist) or SQLite (CSV uploads)
 # ═══════════════════════════════════════════════
 with tab4:
@@ -1029,63 +1043,66 @@ with tab4:
                     st.rerun()
 
             if run_btn and sql_input.strip():
-                try:
-                    with st.spinner("⚡ Querying PostgreSQL (Cloud SQL)…"):
-                        # conn.query() returns a DataFrame and caches results for 10 minutes
-                        result_df = pg_conn.query(sql_input.strip(), ttl="10m")
+                if not is_safe_query(sql_input.strip()):
+                    st.error("🛑 Security Block: Only SELECT queries are allowed. Destructive commands (INSERT, UPDATE, DROP, etc.) have been blocked.")
+                else:
+                    try:
+                        with st.spinner("⚡ Querying PostgreSQL (Cloud SQL)…"):
+                            # conn.query() returns a DataFrame and caches results for 10 minutes
+                            result_df = pg_conn.query(sql_input.strip(), ttl="10m")
 
-                    st.success(
-                        f"✅ Query returned **{len(result_df):,} rows** × "
-                        f"**{len(result_df.columns)} columns** · cached for 10 min"
-                    )
-                    st.dataframe(result_df, use_container_width=True)
+                        st.success(
+                            f"✅ Query returned **{len(result_df):,} rows** × "
+                            f"**{len(result_df.columns)} columns** · cached for 10 min"
+                        )
+                        st.dataframe(result_df, use_container_width=True)
 
-                    st.divider()
+                        st.divider()
 
-                    # ── Auto-Chart ──
-                    if result_df.empty:
-                        st.warning("Query returned 0 rows — no chart to display.")
-                    else:
-                        numeric_res_cols = result_df.select_dtypes(include="number").columns.tolist()
-                        non_numeric_res_cols = result_df.select_dtypes(exclude="number").columns.tolist()
-
-                        if numeric_res_cols:
-                            st.markdown("### 📈 Auto-Generated Bar Chart")
-
-                            if len(result_df.columns) >= 2 and non_numeric_res_cols:
-                                chart_df = result_df.set_index(non_numeric_res_cols[0])[numeric_res_cols[0:3]]
-                            else:
-                                chart_df = result_df[numeric_res_cols[0:3]]
-
-                            chart_df = chart_df.head(30)
-                            st.bar_chart(chart_df, use_container_width=True)
-
-                            if non_numeric_res_cols and numeric_res_cols:
-                                with st.expander("🎨 Enhanced Plotly Chart", expanded=False):
-                                    fig = px.bar(
-                                        result_df.head(30),
-                                        x=non_numeric_res_cols[0],
-                                        y=numeric_res_cols[0],
-                                        title=f"{numeric_res_cols[0]} by {non_numeric_res_cols[0]}",
-                                        color_discrete_sequence=["#6C63FF"],
-                                        template="plotly_dark",
-                                    )
-                                    fig.update_layout(
-                                        plot_bgcolor="rgba(0,0,0,0)",
-                                        paper_bgcolor="rgba(0,0,0,0)",
-                                        margin=dict(l=20, r=20, t=50, b=20),
-                                        xaxis_tickangle=-30,
-                                    )
-                                    st.plotly_chart(fig, use_container_width=True)
+                        # ── Auto-Chart ──
+                        if result_df.empty:
+                            st.warning("Query returned 0 rows — no chart to display.")
                         else:
-                            st.info("ℹ️ No numeric columns in the result – displaying table only.")
+                            numeric_res_cols = result_df.select_dtypes(include="number").columns.tolist()
+                            non_numeric_res_cols = result_df.select_dtypes(exclude="number").columns.tolist()
 
-                except Exception as e:
-                    st.error(f"❌ PostgreSQL Error: {e}")
-                    st.caption(
-                        "Tip: Use PostgreSQL syntax. Table names must match exactly "
-                        "(see the Olist tables list above)."
-                    )
+                            if numeric_res_cols:
+                                st.markdown("### 📈 Auto-Generated Bar Chart")
+
+                                if len(result_df.columns) >= 2 and non_numeric_res_cols:
+                                    chart_df = result_df.set_index(non_numeric_res_cols[0])[numeric_res_cols[0:3]]
+                                else:
+                                    chart_df = result_df[numeric_res_cols[0:3]]
+
+                                chart_df = chart_df.head(30)
+                                st.bar_chart(chart_df, use_container_width=True)
+
+                                if non_numeric_res_cols and numeric_res_cols:
+                                    with st.expander("🎨 Enhanced Plotly Chart", expanded=False):
+                                        fig = px.bar(
+                                            result_df.head(30),
+                                            x=non_numeric_res_cols[0],
+                                            y=numeric_res_cols[0],
+                                            title=f"{numeric_res_cols[0]} by {non_numeric_res_cols[0]}",
+                                            color_discrete_sequence=["#6C63FF"],
+                                            template="plotly_dark",
+                                        )
+                                        fig.update_layout(
+                                            plot_bgcolor="rgba(0,0,0,0)",
+                                            paper_bgcolor="rgba(0,0,0,0)",
+                                            margin=dict(l=20, r=20, t=50, b=20),
+                                            xaxis_tickangle=-30,
+                                        )
+                                        st.plotly_chart(fig, use_container_width=True)
+                            else:
+                                st.info("ℹ️ No numeric columns in the result – displaying table only.")
+
+                    except Exception as e:
+                        st.error(f"❌ PostgreSQL Error: {e}")
+                        st.caption(
+                            "Tip: Use PostgreSQL syntax. Table names must match exactly "
+                            "(see the Olist tables list above)."
+                        )
 
             elif run_btn:
                 st.warning("⚠️ Please enter a SQL query first.")
@@ -1128,55 +1145,58 @@ with tab4:
                     st.rerun()
 
             if run_btn and sql_input.strip():
-                try:
-                    with st.spinner("⚡ Executing query…"):
-                        result_df = pd.read_sql(sql_input.strip(), sqlite_conn)
+                if not is_safe_query(sql_input.strip()):
+                    st.error("🛑 Security Block: Only SELECT queries are allowed. Destructive commands (INSERT, UPDATE, DROP, etc.) have been blocked.")
+                else:
+                    try:
+                        with st.spinner("⚡ Executing query…"):
+                            result_df = pd.read_sql(sql_input.strip(), sqlite_conn)
 
-                    st.success(f"✅ Query returned **{len(result_df):,} rows** × **{len(result_df.columns)} columns**")
-                    st.dataframe(result_df, use_container_width=True)
+                        st.success(f"✅ Query returned **{len(result_df):,} rows** × **{len(result_df.columns)} columns**")
+                        st.dataframe(result_df, use_container_width=True)
 
-                    st.divider()
+                        st.divider()
 
-                    if result_df.empty:
-                        st.warning("Query returned 0 rows — no chart to display.")
-                    else:
-                        numeric_res_cols = result_df.select_dtypes(include="number").columns.tolist()
-                        non_numeric_res_cols = result_df.select_dtypes(exclude="number").columns.tolist()
-
-                        if numeric_res_cols:
-                            st.markdown("### 📈 Auto-Generated Bar Chart")
-
-                            if len(result_df.columns) >= 2 and non_numeric_res_cols:
-                                chart_df = result_df.set_index(non_numeric_res_cols[0])[numeric_res_cols[0:3]]
-                            else:
-                                chart_df = result_df[numeric_res_cols[0:3]]
-
-                            chart_df = chart_df.head(30)
-                            st.bar_chart(chart_df, use_container_width=True)
-
-                            if non_numeric_res_cols and numeric_res_cols:
-                                with st.expander("🎨 Enhanced Plotly Chart", expanded=False):
-                                    fig = px.bar(
-                                        result_df.head(30),
-                                        x=non_numeric_res_cols[0],
-                                        y=numeric_res_cols[0],
-                                        title=f"{numeric_res_cols[0]} by {non_numeric_res_cols[0]}",
-                                        color_discrete_sequence=["#6C63FF"],
-                                        template="plotly_dark",
-                                    )
-                                    fig.update_layout(
-                                        plot_bgcolor="rgba(0,0,0,0)",
-                                        paper_bgcolor="rgba(0,0,0,0)",
-                                        margin=dict(l=20, r=20, t=50, b=20),
-                                        xaxis_tickangle=-30,
-                                    )
-                                    st.plotly_chart(fig, use_container_width=True)
+                        if result_df.empty:
+                            st.warning("Query returned 0 rows — no chart to display.")
                         else:
-                            st.info("ℹ️ No numeric columns in the result – displaying table only (no chart).")
+                            numeric_res_cols = result_df.select_dtypes(include="number").columns.tolist()
+                            non_numeric_res_cols = result_df.select_dtypes(exclude="number").columns.tolist()
 
-                except Exception as e:
-                    st.error(f"❌ SQL Error: {e}")
-                    st.caption("Tip: Make sure your column and table names match exactly. Check the table list above.")
+                            if numeric_res_cols:
+                                st.markdown("### 📈 Auto-Generated Bar Chart")
+
+                                if len(result_df.columns) >= 2 and non_numeric_res_cols:
+                                    chart_df = result_df.set_index(non_numeric_res_cols[0])[numeric_res_cols[0:3]]
+                                else:
+                                    chart_df = result_df[numeric_res_cols[0:3]]
+
+                                chart_df = chart_df.head(30)
+                                st.bar_chart(chart_df, use_container_width=True)
+
+                                if non_numeric_res_cols and numeric_res_cols:
+                                    with st.expander("🎨 Enhanced Plotly Chart", expanded=False):
+                                        fig = px.bar(
+                                            result_df.head(30),
+                                            x=non_numeric_res_cols[0],
+                                            y=numeric_res_cols[0],
+                                            title=f"{numeric_res_cols[0]} by {non_numeric_res_cols[0]}",
+                                            color_discrete_sequence=["#6C63FF"],
+                                            template="plotly_dark",
+                                        )
+                                        fig.update_layout(
+                                            plot_bgcolor="rgba(0,0,0,0)",
+                                            paper_bgcolor="rgba(0,0,0,0)",
+                                            margin=dict(l=20, r=20, t=50, b=20),
+                                            xaxis_tickangle=-30,
+                                        )
+                                        st.plotly_chart(fig, use_container_width=True)
+                            else:
+                                st.info("ℹ️ No numeric columns in the result – displaying table only (no chart).")
+
+                    except Exception as e:
+                        st.error(f"❌ SQL Error: {e}")
+                        st.caption("Tip: Make sure your column and table names match exactly. Check the table list above.")
 
             elif run_btn:
                 st.warning("⚠️ Please enter a SQL query first.")
