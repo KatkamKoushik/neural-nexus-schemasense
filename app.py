@@ -6,6 +6,11 @@ import json
 import sqlite3
 import re
 from io import StringIO
+try:
+    import PyPDF2
+    _PYPDF2_AVAILABLE = True
+except ImportError:
+    _PYPDF2_AVAILABLE = False
 
 # ──────────────────────────────────────────────
 # INITIAL CONFIGURATION
@@ -434,16 +439,25 @@ with st.sidebar:
 
     # ── AI Engine ──
     st.subheader("⚙️ AI Engine")
+    _MODEL_OPTIONS = [
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-pro",
+    ]
+    _MODEL_LABELS = {
+        "gemini-2.5-flash":      "Gemini 3 Flash (Fast)",
+        "gemini-2.0-flash":      "Gemini 2 Flash (Balanced)",
+        "gemini-2.0-flash-lite": "Gemini 2 Flash Lite (Fastest)",
+        "gemini-2.5-flash-lite": "Gemini 3 Flash Lite (Lightweight)",
+        "gemini-2.5-pro":        "Gemini 3 Pro (High Reasoning)",
+    }
     selected_model = st.selectbox(
         "Gemini Model:",
-        [
-            "gemini-2.5-flash",         # Best default – fast & capable
-            "gemini-2.0-flash",         # Solid fallback
-            "gemini-2.0-flash-lite",    # Fastest, lightest
-            "gemini-2.5-flash-lite",    # Newer lightweight option
-            "gemini-2.5-pro",           # Most powerful (strict quota)
-        ],
-        help="Switch models if you hit quota limits. gemini-2.5-flash is recommended.",
+        options=_MODEL_OPTIONS,
+        format_func=lambda m: _MODEL_LABELS.get(m, m),
+        help="Switch models if you hit quota limits.",
     )
 
     st.divider()
@@ -516,6 +530,34 @@ with st.sidebar:
 
     st.divider()
 
+    # ── Business Rules PDF Uploader ──
+    st.subheader("📄 Business Rules")
+    pdf_file = st.file_uploader(
+        "Upload Business Rules (PDF)",
+        type=["pdf"],
+        help="Upload a PDF containing enterprise business rules. The AI will follow them in all responses.",
+    )
+    business_rules_text = ""
+    if pdf_file is not None:
+        if _PYPDF2_AVAILABLE:
+            try:
+                pdf_reader = PyPDF2.PdfReader(pdf_file)
+                pages_text = []
+                for page in pdf_reader.pages:
+                    pages_text.append(page.extract_text() or "")
+                business_rules_text = "\n".join(pages_text).strip()
+                if business_rules_text:
+                    st.success(f"✅ PDF ingested · {len(pdf_reader.pages)} page(s) · {len(business_rules_text):,} chars")
+                else:
+                    st.warning("⚠️ PDF uploaded but no text could be extracted (may be image-based).")
+            except Exception as _pdf_err:
+                st.error(f"❌ PDF read error: {_pdf_err}")
+        else:
+            st.error("❌ PyPDF2 not installed. Add `PyPDF2` to requirements.txt and redeploy.")
+    st.session_state.business_rules_text = business_rules_text
+
+    st.divider()
+
     # ── Actions ──
     st.subheader("⚡ Actions")
 
@@ -543,8 +585,16 @@ with st.sidebar:
 # ──────────────────────────────────────────────
 # AI PERSONA & MODEL INIT
 # ──────────────────────────────────────────────
+# Retrieve PDF business rules text (set in sidebar above)
+_business_rules_text = st.session_state.get("business_rules_text", "")
+_business_rules_section = (
+    f"\n\n---\n**Enterprise Business Rules (uploaded by user):**\n{_business_rules_text}\n"
+    "You MUST strictly follow these rules in all your responses."
+    if _business_rules_text else ""
+)
+
 if data_source == "Built-in: Olist E-Commerce":
-    steward_persona = """
+    steward_persona = f"""
 You are 'SchemaSense AI', an Intelligent Data Dictionary Agent created for the GDG Cloud Delhi hackathon.
 You are connected to the **Olist E-commerce** PostgreSQL database hosted on Google Cloud SQL.
 
@@ -565,7 +615,7 @@ Your responsibilities:
   3. Perform **data quality analysis** — identify nulls, duplicates, anomalies.
   4. Explain table **relationships and join paths**.
   5. Format responses with Markdown for clarity.
-"""
+{_business_rules_section}"""
 else:
     sqlite_schema_section = build_sqlite_system_prompt(st.session_state.sqlite_schema)
     steward_persona = f"""
@@ -584,7 +634,7 @@ Your responsibilities:
   4. Provide business-friendly descriptions for each column.
   5. When multiple tables exist, suggest useful JOIN queries.
   6. Format responses with Markdown. Always wrap SQL in ```sql ... ``` fences.
-"""
+{_business_rules_section}"""
 
 # Configure the API key for non-streaming calls (like quality scan)
 genai.configure(api_key=_get_active_key())
@@ -948,7 +998,7 @@ with tab4:
                 st.code(pg_conn_error, language=None)
         else:
             # Show Olist table reference
-            with st.expander("📂 View Tables & Key Columns"):
+            with st.expander("View Tables & Key Columns"):
                 st.markdown('''
 * **olist_orders_dataset** — order_id, customer_id, order_status, order_purchase_timestamp...
 * **olist_order_items_dataset** — order_id, product_id, seller_id, price, freight_value...
