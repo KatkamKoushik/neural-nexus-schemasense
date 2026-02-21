@@ -472,11 +472,21 @@ with st.sidebar:
     custom_schema_context = ""
 
     if data_source == "Upload Custom Dataset":
+        st.caption("1. Upload your CSV Datasets:")
         uploaded_files = st.file_uploader(
-            "Upload CSV files (multiple allowed)",
-            type=["csv"],
+            "Upload CSV files",
+            type=["csv"], # <-- This is what hid your PDF previously
             accept_multiple_files=True,
-            key="csv_uploader"
+            key="csv_uploader",
+            label_visibility="collapsed"
+        )
+        
+        st.caption("2. Upload your PPT/Business Rules (PDF):")
+        st.file_uploader(
+            "Upload PDF", 
+            type=['pdf'], 
+            key='biz_rules',
+            label_visibility="collapsed"
         )
 
         if uploaded_files:
@@ -485,7 +495,6 @@ with st.sidebar:
             st.session_state.sqlite_conn = conn
             st.session_state.sqlite_schema = schema_info
 
-            # For backward compat: store the first file's df for the column profiler
             first_file = uploaded_files[0]
             first_file.seek(0)
             df_first = pd.read_csv(first_file)
@@ -493,7 +502,6 @@ with st.sidebar:
             meta = extract_schema_metadata(df_first)
             st.session_state.uploaded_meta = meta
 
-            # Build schema context for the AI
             multi_table_info = []
             for fname, cols in schema_info.items():
                 multi_table_info.append(f"Table `{fname}`: columns = [{', '.join(cols)}]")
@@ -504,7 +512,6 @@ with st.sidebar:
                 + f"\nFirst file sample rows: {df_first.head(3).to_json(orient='records')}"
             )
 
-            # Sidebar schema summary
             st.markdown('<span class="status-badge">Schema Ingested</span>', unsafe_allow_html=True)
             if len(uploaded_files) > 1:
                 st.caption(f"📦 {len(uploaded_files)} tables loaded into SQLite")
@@ -518,7 +525,6 @@ with st.sidebar:
             st.session_state.sqlite_conn = None
             st.session_state.sqlite_schema = {}
     else:
-        # ── Live PostgreSQL connection status ──
         if pg_conn is not None:
             st.success("🟢 Connected · Cloud SQL")
             st.caption("Olist PostgreSQL · 9 tables")
@@ -527,12 +533,12 @@ with st.sidebar:
             if pg_conn_error:
                 with st.expander("Connection error details"):
                     st.code(pg_conn_error, language=None)
+        
+        # Olist mode PDF uploader
+        st.caption("Upload your PPT/Business Rules (PDF):")
+        st.file_uploader("Upload PDF", type=['pdf'], key='biz_rules', label_visibility="collapsed")
 
-    # ── NEW: Business Rules PDF (Clean Placement) ──
-    st.sidebar.divider()
-    st.sidebar.subheader("📄 Business Rules")
-    st.sidebar.file_uploader("Ingest Rules (PDF)", type=['pdf'], key='biz_rules')
-    
+    # ── Process the PDF ──
     business_context = ""
     if st.session_state.get('biz_rules') is not None:
         if _PYPDF2_AVAILABLE:
