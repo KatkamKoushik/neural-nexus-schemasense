@@ -6,6 +6,7 @@ import json
 import sqlite3
 import re
 from io import StringIO
+import streamlit.components.v1 as components
 try:
     import PyPDF2
     _PYPDF2_AVAILABLE = True
@@ -532,30 +533,26 @@ with st.sidebar:
 
     # ── Business Rules PDF Uploader ──
     st.subheader("📄 Business Rules")
-    pdf_file = st.file_uploader(
-        "Upload Business Rules (PDF)",
-        type=["pdf"],
-        help="Upload a PDF containing enterprise business rules. The AI will follow them in all responses.",
-    )
-    business_rules_text = ""
-    if pdf_file is not None:
+    pdf_file = st.file_uploader('Upload Business Rules (PDF)', type=['pdf'], key='biz_rules')
+    
+    business_context = ""
+    if st.session_state.biz_rules is not None:
         if _PYPDF2_AVAILABLE:
             try:
-                pdf_reader = PyPDF2.PdfReader(pdf_file)
+                pdf_reader = PyPDF2.PdfReader(st.session_state.biz_rules)
                 pages_text = []
                 for page in pdf_reader.pages:
                     pages_text.append(page.extract_text() or "")
-                business_rules_text = "\n".join(pages_text).strip()
-                if business_rules_text:
-                    st.success(f"✅ PDF ingested · {len(pdf_reader.pages)} page(s) · {len(business_rules_text):,} chars")
+                business_context = "\n".join(pages_text).strip()
+                if business_context:
+                    st.success(f"✅ PDF ingested · {len(pdf_reader.pages)} page(s) · {len(business_context):,} chars")
                 else:
                     st.warning("⚠️ PDF uploaded but no text could be extracted (may be image-based).")
             except Exception as _pdf_err:
                 st.error(f"❌ PDF read error: {_pdf_err}")
         else:
             st.error("❌ PyPDF2 not installed. Add `PyPDF2` to requirements.txt and redeploy.")
-    st.session_state.business_rules_text = business_rules_text
-
+    
     st.divider()
 
     # ── Actions ──
@@ -585,12 +582,10 @@ with st.sidebar:
 # ──────────────────────────────────────────────
 # AI PERSONA & MODEL INIT
 # ──────────────────────────────────────────────
-# Retrieve PDF business rules text (set in sidebar above)
-_business_rules_text = st.session_state.get("business_rules_text", "")
+# Retrieve PDF business rules text
 _business_rules_section = (
-    f"\n\n---\n**Enterprise Business Rules (uploaded by user):**\n{_business_rules_text}\n"
-    "You MUST strictly follow these rules in all your responses."
-    if _business_rules_text else ""
+    f"\n\n---\n**Follow these business rules:**\n{business_context}\n"
+    if business_context else ""
 )
 
 if data_source == "Built-in: Olist E-Commerce":
@@ -788,9 +783,7 @@ with tab2:
                 "</div>",
                 unsafe_allow_html=True,
             )
-            st.markdown('''
-```mermaid
-erDiagram
+            mermaid_code = '''erDiagram
     CUSTOMERS ||--o{ ORDERS : places
     ORDERS ||--o{ ORDER_ITEMS : contains
     ORDERS ||--o{ PAYMENTS : has
@@ -798,9 +791,8 @@ erDiagram
     PRODUCTS ||--o{ ORDER_ITEMS : included_in
     SELLERS ||--o{ ORDER_ITEMS : fulfills
     GEOLOCATION }o--|| CUSTOMERS : locates
-    CATEGORY_TRANSLATION ||--|| PRODUCTS : translates
-```
-''')
+    CATEGORY_TRANSLATION ||--|| PRODUCTS : translates'''
+            st.markdown(f'```mermaid\n{mermaid_code}\n```')
         else:
             if st.session_state.uploaded_meta:
                 st.markdown(
@@ -998,7 +990,7 @@ with tab4:
                 st.code(pg_conn_error, language=None)
         else:
             # Show Olist table reference
-            with st.expander("View Tables & Key Columns"):
+            with st.expander('Database Schema Overview'):
                 st.markdown('''
 * **olist_orders_dataset** — order_id, customer_id, order_status, order_purchase_timestamp...
 * **olist_order_items_dataset** — order_id, product_id, seller_id, price, freight_value...
