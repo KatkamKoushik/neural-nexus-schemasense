@@ -400,6 +400,22 @@ if "last_sql" not in st.session_state:
 
 
 # ──────────────────────────────────────────────
+# LIVE POSTGRESQL CONNECTION  (Olist / Cloud SQL)
+# ──────────────────────────────────────────────
+# Initialised once per session via Streamlit's native connector.
+# Credentials must be set in .streamlit/secrets.toml under [connections.postgresql].
+# On Streamlit Cloud, configure the same block in the Secrets manager.
+pg_conn = None
+pg_conn_error = None
+try:
+    pg_conn = st.connection("postgresql", type="sql")
+    # Lightweight ping to validate the connection immediately
+    pg_conn.query("SELECT 1", ttl=0)
+except Exception as _pg_err:
+    pg_conn_error = str(_pg_err)
+
+
+# ──────────────────────────────────────────────
 # SIDEBAR
 # ──────────────────────────────────────────────
 with st.sidebar:
@@ -496,8 +512,15 @@ with st.sidebar:
             st.session_state.sqlite_conn = None
             st.session_state.sqlite_schema = {}
     else:
-        st.markdown('<span class="status-badge">Connected · Olist DB</span>', unsafe_allow_html=True)
-        st.caption("PostgreSQL · 9 tables · Cloud SQL")
+        # ── Live PostgreSQL connection status ──
+        if pg_conn is not None:
+            st.success("🟢 **Connected** · Olist PostgreSQL · Cloud SQL", icon=None)
+            st.caption("Live database · 9 tables · queries cached 10 min")
+        else:
+            st.error("🔴 **DB Unavailable** · Could not connect to PostgreSQL")
+            if pg_conn_error:
+                with st.expander("Connection error details"):
+                    st.code(pg_conn_error, language=None)
 
     st.divider()
 
@@ -901,115 +924,231 @@ with tab3:
 
 # ═══════════════════════════════════════════════
 # TAB 4 – VISUAL ANALYTICS ENGINE  (FEATURE 3)
+# Dual-mode: PostgreSQL (Olist) or SQLite (CSV uploads)
 # ═══════════════════════════════════════════════
 with tab4:
+    # ── Determine active backend ──
+    _using_postgres = (data_source == "Built-in: Olist E-Commerce")
+    _sql_hint = "PostgreSQL" if _using_postgres else "SQLite"
+
     st.markdown(
         '<div class="glass-card">'
         "<h3 style='margin-top:0'>📊 Visual Analytics Engine</h3>"
-        "<p style='opacity:0.7;font-size:0.9rem'>"
-        "Run SQL queries against your uploaded datasets and instantly visualize results. "
-        "SQL is auto-detected from the AI chat, or enter your own below."
+        f"<p style='opacity:0.7;font-size:0.9rem'>"
+        f"Execute SQL against the <strong>{_sql_hint}</strong> database and instantly visualize results. "
+        "Queries are auto-detected from the AI chat, or enter your own below."
         "</p>"
         "</div>",
         unsafe_allow_html=True,
     )
 
-    conn = st.session_state.sqlite_conn
+    # ── Branch: Olist PostgreSQL vs CSV SQLite ──
+    if _using_postgres:
+        # ── PostgreSQL path ──────────────────────────────────────────
+        if pg_conn is None:
+            st.error(
+                "🔴 **PostgreSQL connection unavailable.** "
+                "Configure `[connections.postgresql]` in `.streamlit/secrets.toml` "
+                "(or in Streamlit Cloud Secrets) and redeploy."
+            )
+            if pg_conn_error:
+                st.code(pg_conn_error, language=None)
+        else:
+            # Show Olist table reference
+            with st.expander("📋 Olist Tables & Key Columns", expanded=False):
+                olist_tables = {
+                    "olist_orders_dataset": ["order_id", "customer_id", "order_status", "order_purchase_timestamp"],
+                    "olist_order_items_dataset": ["order_id", "product_id", "seller_id", "price", "freight_value"],
+                    "olist_products_dataset": ["product_id", "product_category_name"],
+                    "olist_customers_dataset": ["customer_id", "customer_city", "customer_state"],
+                    "olist_sellers_dataset": ["seller_id", "seller_city", "seller_state"],
+                    "olist_order_payments_dataset": ["order_id", "payment_type", "payment_value"],
+                    "olist_order_reviews_dataset": ["review_id", "order_id", "review_score"],
+                    "olist_geolocation_dataset": ["geolocation_zip_code_prefix", "geolocation_lat", "geolocation_lng"],
+                    "olist_product_category_name_translation": ["product_category_name", "product_category_name_english"],
+                }
+                for tname, cols in olist_tables.items():
+                    st.markdown(f"**`{tname}`** — {', '.join([f'`{c}`' for c in cols])}…")
 
-    if conn is None:
-        st.info(
-            "📂 **No database loaded.** Please upload one or more CSV files using "
-            "'Upload Custom Dataset' in the sidebar to enable the Visual Analytics Engine."
-        )
-    else:
-        # Show available tables
-        schema = st.session_state.sqlite_schema
-        if schema:
-            with st.expander("📋 Available Tables & Columns", expanded=False):
-                for tname, cols in schema.items():
-                    st.markdown(f"**`{tname}`** — {', '.join([f'`{c}`' for c in cols])}")
+            st.divider()
 
-        st.divider()
+            # SQL Editor pre-filled with AI-detected SQL
+            default_sql = st.session_state.last_sql or ""
+            if default_sql:
+                st.success("✅ SQL auto-detected from the latest AI response. You can edit it below.")
 
-        # SQL Editor – pre-filled with last AI-generated SQL
-        default_sql = st.session_state.last_sql or ""
-        if default_sql:
-            st.success("✅ SQL auto-detected from the latest AI response. You can edit it below.")
+            sql_input = st.text_area(
+                "📝 SQL Query (PostgreSQL syntax):",
+                value=default_sql,
+                height=160,
+                placeholder=(
+                    "SELECT product_category_name, COUNT(*) AS order_count\n"
+                    "FROM olist_order_items_dataset oi\n"
+                    "JOIN olist_products_dataset p USING (product_id)\n"
+                    "GROUP BY 1 ORDER BY 2 DESC LIMIT 20;"
+                ),
+            )
 
-        sql_input = st.text_area(
-            "📝 SQL Query (SQLite syntax):",
-            value=default_sql,
-            height=160,
-            placeholder="SELECT column_name, COUNT(*) as count FROM your_table GROUP BY column_name ORDER BY count DESC LIMIT 20;",
-        )
+            col_run, col_clear = st.columns([1, 4])
+            with col_run:
+                run_btn = st.button("▶️ Run Query", type="primary", use_container_width=True, key="pg_run")
+            with col_clear:
+                if st.button("🗑️ Clear SQL", use_container_width=True, key="pg_clear"):
+                    st.session_state.last_sql = None
+                    st.rerun()
 
-        col_run, col_clear = st.columns([1, 4])
-        with col_run:
-            run_btn = st.button("▶️ Run Query", type="primary", use_container_width=True)
-        with col_clear:
-            if st.button("🗑️ Clear SQL", use_container_width=True):
-                st.session_state.last_sql = None
-                st.rerun()
+            if run_btn and sql_input.strip():
+                try:
+                    with st.spinner("⚡ Querying PostgreSQL (Cloud SQL)…"):
+                        # conn.query() returns a DataFrame and caches results for 10 minutes
+                        result_df = pg_conn.query(sql_input.strip(), ttl="10m")
 
-        if run_btn and sql_input.strip():
-            try:
-                with st.spinner("⚡ Executing query…"):
-                    result_df = pd.read_sql(sql_input.strip(), conn)
+                    st.success(
+                        f"✅ Query returned **{len(result_df):,} rows** × "
+                        f"**{len(result_df.columns)} columns** · cached for 10 min"
+                    )
+                    st.dataframe(result_df, use_container_width=True)
 
-                st.success(f"✅ Query returned **{len(result_df):,} rows** × **{len(result_df.columns)} columns**")
-                st.dataframe(result_df, use_container_width=True)
+                    st.divider()
 
-                st.divider()
-
-                # ── Auto-Chart ──
-                if result_df.empty:
-                    st.warning("Query returned 0 rows — no chart to display.")
-                else:
-                    numeric_res_cols = result_df.select_dtypes(include="number").columns.tolist()
-                    non_numeric_res_cols = result_df.select_dtypes(exclude="number").columns.tolist()
-
-                    if numeric_res_cols:
-                        st.markdown("### 📈 Auto-Generated Bar Chart")
-
-                        # Pick best columns for chart axes
-                        if len(result_df.columns) >= 2 and non_numeric_res_cols:
-                            # Use first non-numeric as index, first numeric as values
-                            chart_df = result_df.set_index(non_numeric_res_cols[0])[numeric_res_cols[0:3]]
-                        else:
-                            chart_df = result_df[numeric_res_cols[0:3]]
-
-                        # Limit rows for readability
-                        chart_df = chart_df.head(30)
-
-                        st.bar_chart(chart_df, use_container_width=True)
-
-                        # Also provide a Plotly version for richer visuals
-                        if non_numeric_res_cols and numeric_res_cols:
-                            with st.expander("🎨 Enhanced Plotly Chart", expanded=False):
-                                fig = px.bar(
-                                    result_df.head(30),
-                                    x=non_numeric_res_cols[0],
-                                    y=numeric_res_cols[0],
-                                    title=f"{numeric_res_cols[0]} by {non_numeric_res_cols[0]}",
-                                    color_discrete_sequence=["#6C63FF"],
-                                    template="plotly_dark",
-                                )
-                                fig.update_layout(
-                                    plot_bgcolor="rgba(0,0,0,0)",
-                                    paper_bgcolor="rgba(0,0,0,0)",
-                                    margin=dict(l=20, r=20, t=50, b=20),
-                                    xaxis_tickangle=-30,
-                                )
-                                st.plotly_chart(fig, use_container_width=True)
+                    # ── Auto-Chart ──
+                    if result_df.empty:
+                        st.warning("Query returned 0 rows — no chart to display.")
                     else:
-                        st.info("ℹ️ No numeric columns in the result – displaying table only (no chart).")
+                        numeric_res_cols = result_df.select_dtypes(include="number").columns.tolist()
+                        non_numeric_res_cols = result_df.select_dtypes(exclude="number").columns.tolist()
 
-            except Exception as e:
-                st.error(f"❌ SQL Error: {e}")
-                st.caption("Tip: Make sure your column and table names match exactly. Check the table list above.")
+                        if numeric_res_cols:
+                            st.markdown("### 📈 Auto-Generated Bar Chart")
 
-        elif run_btn:
-            st.warning("⚠️ Please enter a SQL query first.")
+                            if len(result_df.columns) >= 2 and non_numeric_res_cols:
+                                chart_df = result_df.set_index(non_numeric_res_cols[0])[numeric_res_cols[0:3]]
+                            else:
+                                chart_df = result_df[numeric_res_cols[0:3]]
+
+                            chart_df = chart_df.head(30)
+                            st.bar_chart(chart_df, use_container_width=True)
+
+                            if non_numeric_res_cols and numeric_res_cols:
+                                with st.expander("🎨 Enhanced Plotly Chart", expanded=False):
+                                    fig = px.bar(
+                                        result_df.head(30),
+                                        x=non_numeric_res_cols[0],
+                                        y=numeric_res_cols[0],
+                                        title=f"{numeric_res_cols[0]} by {non_numeric_res_cols[0]}",
+                                        color_discrete_sequence=["#6C63FF"],
+                                        template="plotly_dark",
+                                    )
+                                    fig.update_layout(
+                                        plot_bgcolor="rgba(0,0,0,0)",
+                                        paper_bgcolor="rgba(0,0,0,0)",
+                                        margin=dict(l=20, r=20, t=50, b=20),
+                                        xaxis_tickangle=-30,
+                                    )
+                                    st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.info("ℹ️ No numeric columns in the result – displaying table only.")
+
+                except Exception as e:
+                    st.error(f"❌ PostgreSQL Error: {e}")
+                    st.caption(
+                        "Tip: Use PostgreSQL syntax. Table names must match exactly "
+                        "(see the Olist tables list above)."
+                    )
+
+            elif run_btn:
+                st.warning("⚠️ Please enter a SQL query first.")
+
+    else:
+        # ── SQLite / CSV upload path ─────────────────────────────────
+        sqlite_conn = st.session_state.sqlite_conn
+
+        if sqlite_conn is None:
+            st.info(
+                "📂 **No database loaded.** Please upload one or more CSV files using "
+                "'Upload Custom Dataset' in the sidebar to enable the Visual Analytics Engine."
+            )
+        else:
+            schema = st.session_state.sqlite_schema
+            if schema:
+                with st.expander("📋 Available Tables & Columns", expanded=False):
+                    for tname, cols in schema.items():
+                        st.markdown(f"**`{tname}`** — {', '.join([f'`{c}`' for c in cols])}")
+
+            st.divider()
+
+            default_sql = st.session_state.last_sql or ""
+            if default_sql:
+                st.success("✅ SQL auto-detected from the latest AI response. You can edit it below.")
+
+            sql_input = st.text_area(
+                "📝 SQL Query (SQLite syntax):",
+                value=default_sql,
+                height=160,
+                placeholder="SELECT column_name, COUNT(*) as count FROM your_table GROUP BY column_name ORDER BY count DESC LIMIT 20;",
+            )
+
+            col_run, col_clear = st.columns([1, 4])
+            with col_run:
+                run_btn = st.button("▶️ Run Query", type="primary", use_container_width=True, key="sqlite_run")
+            with col_clear:
+                if st.button("🗑️ Clear SQL", use_container_width=True, key="sqlite_clear"):
+                    st.session_state.last_sql = None
+                    st.rerun()
+
+            if run_btn and sql_input.strip():
+                try:
+                    with st.spinner("⚡ Executing query…"):
+                        result_df = pd.read_sql(sql_input.strip(), sqlite_conn)
+
+                    st.success(f"✅ Query returned **{len(result_df):,} rows** × **{len(result_df.columns)} columns**")
+                    st.dataframe(result_df, use_container_width=True)
+
+                    st.divider()
+
+                    if result_df.empty:
+                        st.warning("Query returned 0 rows — no chart to display.")
+                    else:
+                        numeric_res_cols = result_df.select_dtypes(include="number").columns.tolist()
+                        non_numeric_res_cols = result_df.select_dtypes(exclude="number").columns.tolist()
+
+                        if numeric_res_cols:
+                            st.markdown("### 📈 Auto-Generated Bar Chart")
+
+                            if len(result_df.columns) >= 2 and non_numeric_res_cols:
+                                chart_df = result_df.set_index(non_numeric_res_cols[0])[numeric_res_cols[0:3]]
+                            else:
+                                chart_df = result_df[numeric_res_cols[0:3]]
+
+                            chart_df = chart_df.head(30)
+                            st.bar_chart(chart_df, use_container_width=True)
+
+                            if non_numeric_res_cols and numeric_res_cols:
+                                with st.expander("🎨 Enhanced Plotly Chart", expanded=False):
+                                    fig = px.bar(
+                                        result_df.head(30),
+                                        x=non_numeric_res_cols[0],
+                                        y=numeric_res_cols[0],
+                                        title=f"{numeric_res_cols[0]} by {non_numeric_res_cols[0]}",
+                                        color_discrete_sequence=["#6C63FF"],
+                                        template="plotly_dark",
+                                    )
+                                    fig.update_layout(
+                                        plot_bgcolor="rgba(0,0,0,0)",
+                                        paper_bgcolor="rgba(0,0,0,0)",
+                                        margin=dict(l=20, r=20, t=50, b=20),
+                                        xaxis_tickangle=-30,
+                                    )
+                                    st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.info("ℹ️ No numeric columns in the result – displaying table only (no chart).")
+
+                except Exception as e:
+                    st.error(f"❌ SQL Error: {e}")
+                    st.caption("Tip: Make sure your column and table names match exactly. Check the table list above.")
+
+            elif run_btn:
+                st.warning("⚠️ Please enter a SQL query first.")
 
 
 # ──────────────────────────────────────────────
