@@ -2,40 +2,40 @@ import streamlit as st
 import google.generativeai as genai
 import pandas as pd
 import plotly.express as px
-import json
 import sqlite3
+import json
 import re
-from io import StringIO
 
-# -------------------------------------------------
+# ------------------------------------------------
 # PAGE CONFIG
-# -------------------------------------------------
+# ------------------------------------------------
 st.set_page_config(
     page_title="SchemaSense AI",
     page_icon="🧠",
-    layout="wide",
+    layout="wide"
 )
 
-# -------------------------------------------------
-# CLEAN SAFE CSS (NO INTERNAL OVERRIDES)
-# -------------------------------------------------
+# ------------------------------------------------
+# SAFE GLASS UI (NO INTERNAL STREAMLIT OVERRIDE)
+# ------------------------------------------------
 st.markdown("""
 <style>
 body { font-family: Inter, sans-serif; }
 
 .hero {
     background: linear-gradient(135deg,#6C63FF,#3B82F6,#06B6D4);
-    padding: 2rem;
-    border-radius: 16px;
-    color: white;
-    margin-bottom: 1.5rem;
+    padding:2rem;
+    border-radius:16px;
+    color:white;
+    margin-bottom:1.5rem;
 }
 
-.card {
+.glass {
     background: rgba(255,255,255,0.05);
-    padding: 1.2rem;
-    border-radius: 12px;
-    margin-bottom: 1rem;
+    border-radius:14px;
+    padding:1.2rem;
+    margin-bottom:1rem;
+    border:1px solid rgba(255,255,255,0.08);
 }
 
 .metric-grid {
@@ -43,45 +43,59 @@ body { font-family: Inter, sans-serif; }
     grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
     gap:12px;
 }
+
 .metric-box {
     background:rgba(255,255,255,0.04);
-    padding:1rem;
     border-radius:12px;
+    padding:1rem;
     text-align:center;
 }
-.metric-box h4 { margin:0; font-size:0.8rem; opacity:0.6; }
-.metric-box h2 { margin:0.3rem 0 0 0; color:#6C63FF; }
+
+.metric-box h4 {
+    margin:0;
+    font-size:0.8rem;
+    opacity:0.6;
+}
+
+.metric-box h2 {
+    margin:0.3rem 0 0 0;
+    color:#6C63FF;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# -------------------------------------------------
-# HERO SECTION
-# -------------------------------------------------
+# ------------------------------------------------
+# HERO
+# ------------------------------------------------
 with st.container():
     st.markdown("""
     <div class="hero">
         <h1>🧠 SchemaSense AI</h1>
-        <p>Intelligent Data Dictionary Agent</p>
+        <p>Intelligent Data Dictionary Agent · Gemini Powered</p>
     </div>
     """, unsafe_allow_html=True)
 
-# -------------------------------------------------
+# ------------------------------------------------
 # SESSION STATE
-# -------------------------------------------------
+# ------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
 if "sqlite_conn" not in st.session_state:
     st.session_state.sqlite_conn = None
+
 if "sqlite_schema" not in st.session_state:
     st.session_state.sqlite_schema = {}
+
 if "last_sql" not in st.session_state:
     st.session_state.last_sql = None
 
-# -------------------------------------------------
-# SIDEBAR DATA UPLOAD
-# -------------------------------------------------
+# ------------------------------------------------
+# SIDEBAR
+# ------------------------------------------------
 with st.sidebar:
     st.header("📂 Data Source")
+
     uploaded_files = st.file_uploader(
         "Upload CSV files",
         type=["csv"],
@@ -100,40 +114,102 @@ with st.sidebar:
 
         st.session_state.sqlite_conn = conn
         st.session_state.sqlite_schema = schema
-        st.success(f"{len(schema)} table(s) loaded.")
+        st.success(f"{len(schema)} table(s) loaded")
 
-# -------------------------------------------------
+    st.divider()
+
+    st.subheader("⚙️ AI Settings")
+    api_key = st.text_input("Gemini API Key", type="password")
+
+    if api_key:
+        genai.configure(api_key=api_key)
+
+# ------------------------------------------------
 # TABS
-# -------------------------------------------------
-tab1, tab2 = st.tabs(["💬 Chat", "📊 Visual Analytics"])
+# ------------------------------------------------
+tab_chat, tab_schema, tab_profile, tab_visual = st.tabs(
+    ["💬 Chat", "📊 Schema", "📈 Column Profiler", "📊 Visual Analytics"]
+)
 
-# -------------------------------------------------
+# ------------------------------------------------
 # TAB 1 – CHAT
-# -------------------------------------------------
-with tab1:
+# ------------------------------------------------
+with tab_chat:
+
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if prompt := st.chat_input("Ask something about your data..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
+    if prompt := st.chat_input("Ask about your data..."):
+        st.session_state.messages.append({"role":"user","content":prompt})
+
         with st.chat_message("assistant"):
-            st.markdown("⚠️ AI disabled in debug version.")
+            if api_key:
+                model = genai.GenerativeModel("gemini-2.0-flash")
+                response = model.generate_content(prompt)
+                st.markdown(response.text)
+                st.session_state.messages.append({"role":"assistant","content":response.text})
 
-# -------------------------------------------------
-# TAB 2 – VISUAL ANALYTICS (STABLE VERSION)
-# -------------------------------------------------
-with tab2:
+                sql_match = re.search(r"(SELECT .*?;)", response.text, re.I | re.S)
+                if sql_match:
+                    st.session_state.last_sql = sql_match.group(1)
+            else:
+                st.warning("Enter API key in sidebar")
 
-    if st.session_state.sqlite_conn is None:
-        st.info("Upload CSV files in sidebar to enable SQL engine.")
+# ------------------------------------------------
+# TAB 2 – SCHEMA VIEW
+# ------------------------------------------------
+with tab_schema:
+
+    schema = st.session_state.sqlite_schema
+
+    if schema:
+        for t, cols in schema.items():
+            with st.expander(f"📋 {t}"):
+                st.write(", ".join(cols))
     else:
-        schema = st.session_state.sqlite_schema
+        st.info("Upload dataset to view schema")
 
-        with st.expander("📋 Available Tables", expanded=False):
-            for t, cols in schema.items():
-                st.markdown(f"**{t}** — {', '.join(cols)}")
+# ------------------------------------------------
+# TAB 3 – COLUMN PROFILER
+# ------------------------------------------------
+with tab_profile:
 
+    conn = st.session_state.sqlite_conn
+
+    if conn:
+        tables = list(st.session_state.sqlite_schema.keys())
+        table = st.selectbox("Select Table", tables)
+
+        df = pd.read_sql(f"SELECT * FROM {table}", conn)
+
+        st.markdown('<div class="metric-grid">', unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="metric-box">
+            <h4>Rows</h4><h2>{len(df)}</h2>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        numeric_cols = df.select_dtypes("number").columns
+
+        for col in numeric_cols[:3]:
+            fig = px.histogram(df, x=col)
+            st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.info("Upload dataset first")
+
+# ------------------------------------------------
+# TAB 4 – VISUAL ANALYTICS
+# ------------------------------------------------
+with tab_visual:
+
+    conn = st.session_state.sqlite_conn
+
+    if not conn:
+        st.info("Upload dataset to enable SQL engine")
+    else:
         default_sql = st.session_state.last_sql or ""
 
         sql_input = st.text_area(
@@ -142,46 +218,20 @@ with tab2:
             height=150
         )
 
-        col1, col2 = st.columns([1,4])
-        with col1:
-            run = st.button("Run Query", type="primary")
-        with col2:
-            if st.button("Clear"):
-                st.session_state.last_sql = None
-                st.rerun()
-
-        if run and sql_input.strip():
+        if st.button("Run Query"):
             try:
-                df = pd.read_sql(sql_input, st.session_state.sqlite_conn)
-
-                st.success(f"{len(df)} rows returned")
+                df = pd.read_sql(sql_input, conn)
                 st.dataframe(df, use_container_width=True)
 
-                if not df.empty:
-                    num_cols = df.select_dtypes("number").columns.tolist()
-                    cat_cols = df.select_dtypes(exclude="number").columns.tolist()
+                num_cols = df.select_dtypes("number").columns
+                cat_cols = df.select_dtypes(exclude="number").columns
 
-                    if num_cols:
-                        st.subheader("Auto Chart")
-
-                        if cat_cols:
-                            chart_df = df.set_index(cat_cols[0])[num_cols[:3]]
-                        else:
-                            chart_df = df[num_cols[:3]]
-
-                        chart_df = chart_df.head(30)
-                        st.bar_chart(chart_df, use_container_width=True)
-
-                        if cat_cols:
-                            fig = px.bar(
-                                df.head(30),
-                                x=cat_cols[0],
-                                y=num_cols[0],
-                                title=f"{num_cols[0]} by {cat_cols[0]}"
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
+                if len(num_cols) > 0:
+                    if len(cat_cols) > 0:
+                        fig = px.bar(df.head(30), x=cat_cols[0], y=num_cols[0])
                     else:
-                        st.info("No numeric columns for charting.")
+                        fig = px.bar(df.head(30), y=num_cols[0])
+                    st.plotly_chart(fig, use_container_width=True)
 
             except Exception as e:
                 st.error(f"SQL Error: {e}")
