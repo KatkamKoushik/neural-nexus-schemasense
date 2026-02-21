@@ -530,11 +530,8 @@ with st.sidebar:
                     with st.expander("Connection error details"):
                         st.code(pg_conn_error, language=None)
     
-        st.divider()
-    
-        # ── Business Rules PDF Uploader ──
-        st.subheader("📄 Business Rules")
-        pdf_file = st.file_uploader('Upload Business Rules (PDF)', type=['pdf'], key='biz_rules')
+        st.sidebar.divider()
+        pdf_file = st.sidebar.file_uploader("📂 Upload Business Rules (PDF)", type=['pdf'])
         
         business_context = ""
         if st.session_state.biz_rules is not None:
@@ -795,8 +792,7 @@ with tab2:
     SELLERS ||--o{ ORDER_ITEMS : fulfills
     GEOLOCATION }o--|| CUSTOMERS : locates
     CATEGORY_TRANSLATION ||--|| PRODUCTS : translates'''
-            with st.container():
-                st.markdown(f'```mermaid\n{mermaid_code}\n```')
+            st.components.v1.html(f'<div class="mermaid">{mermaid_code}</div>', height=400)
         else:
             if st.session_state.uploaded_meta:
                 st.markdown(
@@ -970,16 +966,8 @@ with tab4:
     _using_postgres = (data_source == "Built-in: Olist E-Commerce")
     _sql_hint = "PostgreSQL" if _using_postgres else "SQLite"
 
-    st.markdown(
-        '<div class="glass-card">'
-        "<h3 style='margin-top:0'>📊 Visual Analytics Engine</h3>"
-        f"<p style='opacity:0.7;font-size:0.9rem'>"
-        f"Execute SQL against the <strong>{_sql_hint}</strong> database and instantly visualize results. "
-        "Queries are auto-detected from the AI chat, or enter your own below."
-        "</p>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
+    st.title("📊 Visual Analytics Engine")
+    st.write(f"Execute SQL against the **{_sql_hint}** database. Queries are auto-detected from the chat.")
 
     # ── Branch: Olist PostgreSQL vs CSV SQLite ──
     if _using_postgres:
