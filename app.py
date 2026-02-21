@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 # ──────────────────────────────────────────────
 st.set_page_config(
     page_title="SchemaSense AI – Intelligent Data Dictionary Agent",
-    page_icon="🧠",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -30,7 +30,7 @@ st.markdown("""
 <style>
 /* ---------- Google Font ---------- */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-html, body, [class*="st-"] { font-family: 'Inter', sans-serif; }
+html, body { font-family: 'Inter', sans-serif; }
 
 /* ---------- Gradient hero header ---------- */
 .hero-header {
@@ -427,7 +427,6 @@ except Exception as _pg_err:
 with st.sidebar:
     st.markdown(
         '<div style="text-align:center;padding:0.5rem 0 0.2rem 0;">'
-        '<span style="font-size:2.2rem">🧠</span>'
         '<h2 style="margin:0;background:linear-gradient(90deg,#6C63FF,#06B6D4);'
         '-webkit-background-clip:text;-webkit-text-fill-color:transparent;">'
         "SchemaSense AI</h2>"
@@ -639,7 +638,7 @@ model = genai.GenerativeModel(selected_model, system_instruction=steward_persona
 # ──────────────────────────────────────────────
 st.markdown(
     '<div class="hero-header">'
-    "<h1>🧠 SchemaSense AI</h1>"
+    "<h1>SchemaSense AI</h1>"
     "<p>Your Intelligent Data Dictionary Agent · Powered by Gemini & Google Cloud</p>"
     "</div>",
     unsafe_allow_html=True,
@@ -702,7 +701,7 @@ with tab1:
                     role = "user" if msg["role"] == "user" else "model"
                     history_for_api.append({"role": role, "parts": [msg["content"]]})
 
-                with st.status("🧠 SchemaSense is thinking …", expanded=False):
+                with st.status("⚙️ SchemaSense is thinking …", expanded=False):
                     # FEATURE 1: use key-rotation wrapper (streaming)
                     responses, _ = generate_with_fallback(
                         selected_model,
