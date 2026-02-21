@@ -530,14 +530,15 @@ with st.sidebar:
                     with st.expander("Connection error details"):
                         st.code(pg_conn_error, language=None)
     
-        st.sidebar.divider()
-        pdf_file = st.sidebar.file_uploader("📂 Upload Business Rules (PDF)", type=['pdf'])
+        with st.sidebar.container():
+            st.sidebar.divider()
+            st.sidebar.file_uploader("📂 Upload Business Rules (PDF)", type=['pdf'], key='biz_rules')
         
         business_context = ""
-        if st.session_state.biz_rules is not None:
+        if st.session_state.get('biz_rules') is not None:
             if _PYPDF2_AVAILABLE:
                 try:
-                    pdf_reader = PyPDF2.PdfReader(st.session_state.biz_rules)
+                    pdf_reader = PyPDF2.PdfReader(st.session_state.get('biz_rules'))
                     pages_text = []
                     for page in pdf_reader.pages:
                         pages_text.append(page.extract_text() or "")
