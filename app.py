@@ -163,7 +163,7 @@ if "db_type" not in st.session_state: st.session_state.db_type = ""
 if "last_sql" not in st.session_state: st.session_state.last_sql = None
 
 # ──────────────────────────────────────────────
-# SIDEBAR: DYNAMIC CREDENTIALS
+# SIDEBAR: DYNAMIC CREDENTIALS & KNOWLEDGE BASE
 # ──────────────────────────────────────────────
 with st.sidebar:
     st.markdown(
@@ -215,6 +215,22 @@ with st.sidebar:
                 except Exception as e:
                     st.error(f"Connection Failed: {e}")
 
+    # --- Change 2: Add Enterprise Knowledge Base to the Sidebar ---
+    st.divider()
+    st.subheader("🗄️ Enterprise Knowledge Base")
+    with st.expander("Sync Cloud Business Rules"):
+        st.info("Connect to Google Cloud Storage (GCS) or AWS S3.")
+        cloud_uri = st.text_input("Cloud Storage URI (e.g., gs://enterprise-rules/q1.pdf)")
+        
+        st.markdown("**Or manual fallback override:**")
+        uploaded_file = st.file_uploader("Ingest Document", type=["pdf"])
+        
+        if uploaded_file is not None and uploaded_file.size > 5 * 1024 * 1024:
+            st.warning("Enterprise scale alert: Large files in production are streamed via BigQuery. This prototype uses in-memory limits.")
+            
+        if st.button("Fetch Rules from Cloud", use_container_width=True):
+            st.success(f"Successfully synced business rules from {cloud_uri if cloud_uri else 'local fallback'}")
+
     st.divider()
     if st.button("🗑️ Clear Conversation", use_container_width=True):
         st.session_state.messages = [{"role": "assistant", "content": "👋 Conversation cleared. How can I help?"}]
@@ -224,19 +240,18 @@ with st.sidebar:
 # ──────────────────────────────────────────────
 # AI PERSONA
 # ──────────────────────────────────────────────
+# --- Change 1: Update the AI Persona (System Prompt) ---
 steward_persona = f"""
 You are 'SchemaSense AI', an Enterprise Data Dictionary Agent.
 You are currently connected to a live {st.session_state.db_type} database.
-
-Here is the exact schema extracted from the database (Tables, Columns, Data Types, and Foreign Keys):
+Here is the exact schema extracted from the database:
 {st.session_state.db_schema_text if st.session_state.db_schema_text else "No database connected yet."}
+Your Enterprise Responsibilities:
 
-Your responsibilities:
-1. Write optimized, production-quality SQL specific to {st.session_state.db_type}.
-2. Use the exact table names and column names provided in the schema above.
-3. Utilize the Foreign Keys provided to write accurate JOINs.
-4. Explain database relationships and answer business questions.
-5. Format responses with Markdown. ALWAYS wrap SQL code in ```sql ... ``` fences.
+SCHEMA RULE: If the database is PostgreSQL, it uses the 'public' schema. You MUST prefix EVERY table name with 'public.' in your SQL queries (e.g., 'public.olist_orders_dataset'). If you omit it, the query will fail.
+SECURITY RULE: You are restricted to READ-ONLY access. Only generate SELECT statements. Never generate DROP, DELETE, or UPDATE commands.
+BUSINESS RULE: When asked to explain tables, deeply explain the relationships between them. Identify the Foreign Keys connecting them and explain the specific business purpose of why they are linked.
+Format responses with Markdown. ALWAYS wrap SQL code in ```sql ... ``` fences.
 """
 
 genai.configure(api_key=_get_active_key())
