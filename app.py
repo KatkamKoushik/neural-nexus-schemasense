@@ -430,14 +430,6 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    # API Key Status
-    num_keys = len(API_KEYS)
-    active_idx = st.session_state.active_key_index % num_keys
-    if num_keys > 1:
-        st.markdown(
-            f'<span class="key-info">🔑 {num_keys} keys · Active: #{active_idx + 1}</span>',
-            unsafe_allow_html=True,
-        )
     st.divider()
 
     # ── AI Engine ──
@@ -746,8 +738,10 @@ with tab2:
                 "</div>",
                 unsafe_allow_html=True,
             )
-            st.markdown("""
-```mermaid
+            st.html("""
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+<div class="mermaid">
 erDiagram
     CUSTOMERS ||--o{ ORDERS : places
     ORDERS ||--o{ ORDER_ITEMS : contains
@@ -757,7 +751,7 @@ erDiagram
     SELLERS ||--o{ ORDER_ITEMS : fulfills
     GEOLOCATION }o--|| CUSTOMERS : locates
     CATEGORY_TRANSLATION ||--|| PRODUCTS : translates
-```
+</div>
 """)
         else:
             if st.session_state.uploaded_meta:
@@ -915,8 +909,9 @@ with tab3:
 
     elif data_source == "Built-in: Olist E-Commerce":
         st.info(
-            "📌 The Column Profiler is available for **uploaded datasets**. "
-            "Switch to 'Upload Custom Dataset' in the sidebar and upload a CSV to unlock interactive charts."
+            "Column Profiling for the massive 100k+ row Olist database is handled via the "
+            "AI Quality Guard. To use the interactive micro-profiler, switch to "
+            "**Upload Custom Dataset** in the sidebar and upload a CSV."
         )
     else:
         st.info("📂 Upload a CSV in the sidebar to start profiling columns.")
