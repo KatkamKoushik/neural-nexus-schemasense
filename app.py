@@ -738,10 +738,8 @@ with tab2:
                 "</div>",
                 unsafe_allow_html=True,
             )
-            st.html("""
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-<script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
-<div class="mermaid">
+            st.markdown('''
+```mermaid
 erDiagram
     CUSTOMERS ||--o{ ORDERS : places
     ORDERS ||--o{ ORDER_ITEMS : contains
@@ -751,8 +749,8 @@ erDiagram
     SELLERS ||--o{ ORDER_ITEMS : fulfills
     GEOLOCATION }o--|| CUSTOMERS : locates
     CATEGORY_TRANSLATION ||--|| PRODUCTS : translates
-</div>
-""")
+```
+''')
         else:
             if st.session_state.uploaded_meta:
                 st.markdown(
@@ -950,20 +948,18 @@ with tab4:
                 st.code(pg_conn_error, language=None)
         else:
             # Show Olist table reference
-            with st.expander("📋 Olist Tables & Key Columns", expanded=False):
-                olist_tables = {
-                    "olist_orders_dataset": ["order_id", "customer_id", "order_status", "order_purchase_timestamp"],
-                    "olist_order_items_dataset": ["order_id", "product_id", "seller_id", "price", "freight_value"],
-                    "olist_products_dataset": ["product_id", "product_category_name"],
-                    "olist_customers_dataset": ["customer_id", "customer_city", "customer_state"],
-                    "olist_sellers_dataset": ["seller_id", "seller_city", "seller_state"],
-                    "olist_order_payments_dataset": ["order_id", "payment_type", "payment_value"],
-                    "olist_order_reviews_dataset": ["review_id", "order_id", "review_score"],
-                    "olist_geolocation_dataset": ["geolocation_zip_code_prefix", "geolocation_lat", "geolocation_lng"],
-                    "olist_product_category_name_translation": ["product_category_name", "product_category_name_english"],
-                }
-                for tname, cols in olist_tables.items():
-                    st.markdown(f"**`{tname}`** — {', '.join([f'`{c}`' for c in cols])}…")
+            with st.expander("📂 View Tables & Key Columns"):
+                st.markdown('''
+* **olist_orders_dataset** — order_id, customer_id, order_status, order_purchase_timestamp...
+* **olist_order_items_dataset** — order_id, product_id, seller_id, price, freight_value...
+* **olist_products_dataset** — product_id, product_category_name...
+* **olist_customers_dataset** — customer_id, customer_city, customer_state...
+* **olist_sellers_dataset** — seller_id, seller_city, seller_state...
+* **olist_order_payments_dataset** — order_id, payment_type, payment_value...
+* **olist_order_reviews_dataset** — review_id, order_id, review_score...
+* **olist_geolocation_dataset** — geolocation_zip_code_prefix, geolocation_lat, geolocation_lng...
+* **olist_product_category_name_translation** — product_category_name, product_category_name_english...
+''')
 
             st.divider()
 
