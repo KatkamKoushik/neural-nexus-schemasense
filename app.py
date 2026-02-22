@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.express as px
 import json
 import re
+import urllib.parse
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -98,10 +99,13 @@ def generate_with_fallback(model_name: str, system_prompt: str, messages_or_prom
 # ──────────────────────────────────────────────
 def build_connection_string(db_type, host, port, db_name, user, password):
     """Constructs the SQLAlchemy connection string based on the selected DB type."""
+    safe_user = urllib.parse.quote_plus(user)
+    safe_password = urllib.parse.quote_plus(password)
+    
     if db_type == "PostgreSQL":
-        return f"postgresql://{user}:{password}@{host}:{port}/{db_name}"
+        return f"postgresql://{safe_user}:{safe_password}@{host}:{port}/{db_name}"
     elif db_type == "MySQL":
-        return f"mysql+pymysql://{user}:{password}@{host}:{port}/{db_name}"
+        return f"mysql+pymysql://{safe_user}:{safe_password}@{host}:{port}/{db_name}"
     return None
 
 def extract_database_schema(engine):
@@ -176,7 +180,11 @@ with st.sidebar:
     st.divider()
 
     st.subheader("⚙️ AI Engine")
-    selected_model = st.selectbox("Gemini Model:", ["gemini-2.5-flash", "gemini-2.5-pro"])
+    selected_model = st.selectbox("Gemini Model:", [
+        "gemini-3-flash-preview", 
+        "gemini-2.5-pro", 
+        "gemini-2.5-flash"
+    ])
 
     st.divider()
     st.subheader("🔌 Live Database Connection")
@@ -373,7 +381,7 @@ with tab3:
                     st.error(f"Error fetching data: {e}")
 
 # ═══════════════════════════════════════════════
-# TAB 4 – VISUAL ANALYTICS ENGINE
+# TAB 4 – VISUAL Analytics ENGINE
 # ═══════════════════════════════════════════════
 with tab4:
     if st.session_state.db_engine is None:
