@@ -1,3 +1,4 @@
+
 import streamlit as st
 import google.generativeai as genai
 import pandas as pd
@@ -97,49 +98,73 @@ def generate_with_fallback(model_name: str, system_prompt: str, messages_or_prom
 # ──────────────────────────────────────────────
 # FEATURE 2: DYNAMIC DATABASE ENGINE
 # ──────────────────────────────────────────────
-
 def build_connection_string(db_type, host, port, db_name, user, password):
     """Constructs the SQLAlchemy connection string based on the selected DB type."""
+    if not all([host, port, db_name, user, password]):
+        raise ValueError("All connection parameters are required")
     
-    # Safely URL-encode the username and password to handle special characters (like @, #, ?, etc.)
-    safe_user = urllib.parse.quote_plus(user)
-    safe_password = urllib.parse.quote_plus(password)
+    safe_user = urllib.parse.quote_plus(str(user))
+    safe_password = urllib.parse.quote_plus(str(password))
+    safe_host = str(host).strip()
+    safe_db_name = str(db_name).strip()
+    
+    try:
+        port = int(port)
+    except (ValueError, TypeError):
+        raise ValueError("Port must be a valid integer")
     
     if db_type == "PostgreSQL":
-        return f"postgresql://{safe_user}:{safe_password}@{host}:{port}/{db_name}"
+        return f"postgresql+psycopg2://{safe_user}:{safe_password}@{safe_host}:{port}/{safe_db_name}"
     elif db_type == "MySQL":
-        return f"mysql+pymysql://{safe_user}:{safe_password}@{host}:{port}/{db_name}"
-    return None
+        return f"mysql+pymysql://{safe_user}:{safe_password}@{safe_host}:{port}/{safe_db_name}?charset=utf8mb4"
+    else:
+        raise ValueError(f"Unsupported database type: {db_type}")
 
 def extract_database_schema(engine):
     """Automatically inspects the database to get tables, columns, and foreign keys."""
-    inspector = inspect(engine)
-    schema_dict = {}
-    schema_text_lines = []
+    try:
+        inspector = inspect(engine)
+        schema_dict = {}
+        schema_text_lines = []
 
-    tables = inspector.get_table_names()
-    for table in tables:
-        columns = inspector.get_columns(table)
-        fks = inspector.get_foreign_keys(table)
-        
-        col_details = []
-        for col in columns:
-            col_details.append(f"{col['name']} ({col['type']})")
-        
-        schema_dict[table] = {
-            "columns": col_details,
-            "foreign_keys": fks
-        }
+        tables = inspector.get_table_names()
+        if not tables:
+            return {}, "No tables found in the database."
+            
+        for table in tables:
+            try:
+                columns = inspector.get_columns(table)
+                fks = inspector.get_foreign_keys(table)
+                
+                col_details = []
+                for col in columns:
+                    col_type = str(col.get('type', 'UNKNOWN'))
+                    nullable = "NULL" if col.get('nullable', True) else "NOT NULL"
+                    col_details.append(f"{col['name']} ({col_type}) {nullable}")
+                
+                schema_dict[table] = {
+                    "columns": col_details,
+                    "foreign_keys": fks
+                }
 
-        # Build text representation for the AI Prompt
-        schema_text_lines.append(f"Table: {table}")
-        schema_text_lines.append(f"  Columns: {', '.join(col_details)}")
-        if fks:
-            fk_strings = [f"({fk['constrained_columns'][0]} -> {fk['referred_table']}.{fk['referred_columns'][0]})" for fk in fks]
-            schema_text_lines.append(f"  Foreign Keys: {', '.join(fk_strings)}")
-        schema_text_lines.append("") # blank line
+                # Build text representation for the AI Prompt
+                schema_text_lines.append(f"Table: {table}")
+                schema_text_lines.append(f"  Columns: {', '.join(col_details)}")
+                if fks:
+                    fk_strings = []
+                    for fk in fks:
+                        if fk.get('constrained_columns') and fk.get('referred_table') and fk.get('referred_columns'):
+                            fk_strings.append(f"({fk['constrained_columns'][0]} -> {fk['referred_table']}.{fk['referred_columns'][0]})")
+                    if fk_strings:
+                        schema_text_lines.append(f"  Foreign Keys: {', '.join(fk_strings)}")
+                schema_text_lines.append("")  # blank line
+            except Exception as e:
+                st.warning(f"Could not inspect table {table}: {e}")
+                continue
 
-    return schema_dict, "\n".join(schema_text_lines)
+        return schema_dict, "\n".join(schema_text_lines)
+    except Exception as e:
+        raise Exception(f"Failed to extract database schema: {e}")
 
 # ──────────────────────────────────────────────
 # FEATURE 3: SQL EXTRACTION & GUARDRAILS
@@ -152,10 +177,30 @@ def extract_sql_from_response(text_response: str) -> str | None:
     return None
 
 def is_safe_query(query: str) -> bool:
-    forbidden = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE", "GRANT", "REVOKE", "REPLACE"]
-    query_upper = query.upper()
+    """Check if SQL query is safe (read-only)."""
+    if not query or not isinstance(query, str):
+        return False
+        
+    forbidden = [
+        "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE", 
+        "GRANT", "REVOKE", "REPLACE", "CREATE", "EXEC", "EXECUTE",
+        "CALL", "MERGE", "UPSERT", "COPY", "BULK", "LOAD"
+    ]
+    
+    # Remove comments and normalize whitespace
+    query_clean = re.sub(r'--.*?\n', ' ', query)
+    query_clean = re.sub(r'/\*.*?\*/', ' ', query_clean, flags=re.DOTALL)
+    query_upper = query_clean.upper().strip()
+    
+    # Check for forbidden keywords
     for keyword in forbidden:
-        if re.search(rf'\b{keyword}\b', query_upper): return False
+        if re.search(rf'\b{keyword}\b', query_upper):
+            return False
+            
+    # Must start with SELECT, WITH, or SHOW
+    if not re.match(r'^\s*(SELECT|WITH|SHOW)\b', query_upper):
+        return False
+        
     return True
 
 # ──────────────────────────────────────────────
@@ -210,9 +255,22 @@ with st.sidebar:
             with st.spinner("Connecting and extracting schema..."):
                 try:
                     conn_str = build_connection_string(db_engine_choice, db_host, db_port, db_name, db_user, db_pass)
-                    engine = create_engine(conn_str)
+                    engine = create_engine(
+                        conn_str,
+                        pool_pre_ping=True,
+                        pool_recycle=3600,
+                        connect_args={
+                            "connect_timeout": 10,
+                            "read_timeout": 30,
+                            "write_timeout": 30
+                        } if db_engine_choice == "MySQL" else {"connect_timeout": 10}
+                    )
                     
-                    # Test connection & extract
+                    # Test connection with timeout
+                    with engine.connect() as conn:
+                        conn.execute(text("SELECT 1"))
+                    
+                    # Extract schema
                     schema_dict, schema_text = extract_database_schema(engine)
                     
                     st.session_state.db_engine = engine
@@ -223,8 +281,20 @@ with st.sidebar:
                     st.success(f"Connected! Found {len(schema_dict)} tables.")
                     st.session_state.messages.append({"role": "assistant", "content": f"✅ Successfully connected to **{db_name}**. I've analyzed the schema and found {len(schema_dict)} tables. What would you like to know?"})
                 
+                except ValueError as ve:
+                    st.error(f"Configuration Error: {ve}")
                 except Exception as e:
-                    st.error(f"Connection Failed: {e}")
+                    error_msg = str(e)
+                    if "pymysql" in error_msg.lower():
+                        st.error("❌ PyMySQL driver not found. Please install: `pip install pymysql`")
+                    elif "psycopg2" in error_msg.lower():
+                        st.error("❌ PostgreSQL driver not found. Please install: `pip install psycopg2-binary`")
+                    elif "timeout" in error_msg.lower():
+                        st.error("❌ Connection timeout. Please check your host and network.")
+                    elif "authentication" in error_msg.lower() or "password" in error_msg.lower():
+                        st.error("❌ Authentication failed. Please check your username and password.")
+                    else:
+                        st.error(f"❌ Connection Failed: {error_msg}")
 
     # --- Change 2: Add Enterprise Knowledge Base to the Sidebar ---
     st.divider()
@@ -384,7 +454,7 @@ with tab3:
                     st.error(f"Error fetching data: {e}")
 
 # ═══════════════════════════════════════════════
-# TAB 4 – VISUAL ANALYTICS ENGINE
+# TAB 4 – VISUAL Analytics ENGINE
 # ═══════════════════════════════════════════════
 with tab4:
     if st.session_state.db_engine is None:
