@@ -1,7 +1,7 @@
 # .gitignore for SchemaSense AI / Intelligent Data Dictionary Agent
 
 # ── Secrets (NEVER commit) ──
-.streamlit/secrets.toml
+#.streamlit/secrets.toml
 
 # ── Python ──
 __pycache__/
