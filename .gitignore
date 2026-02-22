@@ -31,3 +31,5 @@ ENV/
 Thumbs.db
 desktop.ini
 .streamlit/secrets.toml
+.streamlit/secrets.toml
+.streamlit/
