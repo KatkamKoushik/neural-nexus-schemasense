@@ -9,6 +9,15 @@ import urllib.parse
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
+# Try to import pymysql, install if missing
+try:
+    import pymysql
+except ImportError:
+    st.warning("Installing PyMySQL...")
+    import subprocess
+    subprocess.run(["pip", "install", "pymysql==1.1.1"], check=True)
+    import pymysql
+
 # ──────────────────────────────────────────────
 # INITIAL CONFIGURATION
 # ──────────────────────────────────────────────
@@ -285,8 +294,14 @@ with st.sidebar:
                     st.error(f"Configuration Error: {ve}")
                 except Exception as e:
                     error_msg = str(e)
-                    if "pymysql" in error_msg.lower():
-                        st.error("❌ PyMySQL driver not found. Please install: `pip install pymysql`")
+                    if "pymysql" in error_msg.lower() or "no module named 'pymysql'" in error_msg.lower():
+                        st.error("❌ PyMySQL driver not found. Installing now...")
+                        import subprocess
+                        try:
+                            subprocess.run(["pip", "install", "pymysql==1.1.1"], check=True, capture_output=True)
+                            st.success("✅ PyMySQL installed. Please try connecting again.")
+                        except:
+                            st.error("❌ Failed to install PyMySQL. Run: `pip install pymysql`")
                     elif "psycopg2" in error_msg.lower():
                         st.error("❌ PostgreSQL driver not found. Please install: `pip install psycopg2-binary`")
                     elif "timeout" in error_msg.lower():
