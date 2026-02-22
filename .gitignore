@@ -1,7 +1,7 @@
-# .gitignore for SchemaSense AI / Intelligent Data Dictionary Agent
+# .gitignore for SchemaSense AI / Enterprise Data Agent
 
 # ── Secrets (NEVER commit) ──
-#.streamlit/secrets.toml
+.streamlit/secrets.toml
 
 # ── Python ──
 __pycache__/
@@ -21,15 +21,10 @@ venv/
 env/
 ENV/
 
-# ── IDE ──
+# ── IDE & OS ──
 .idea/
 .vscode/
 *.code-workspace
-
-# ── OS ──
 .DS_Store
 Thumbs.db
 desktop.ini
-.streamlit/secrets.toml
-.streamlit/secrets.toml
-.streamlit/
