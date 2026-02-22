@@ -13,10 +13,16 @@ from sqlalchemy.exc import SQLAlchemyError
 try:
     import pymysql
 except ImportError:
-    st.warning("Installing PyMySQL...")
     import subprocess
-    subprocess.run(["pip", "install", "pymysql==1.1.1"], check=True)
-    import pymysql
+    import sys
+    st.warning("Installing PyMySQL...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "pymysql==1.1.1"])
+        import pymysql
+        st.success("✅ PyMySQL installed successfully!")
+    except Exception as e:
+        st.error(f"❌ Failed to install PyMySQL: {e}")
+        st.error("Please run: `pip install pymysql` manually")
 
 # ──────────────────────────────────────────────
 # INITIAL CONFIGURATION
