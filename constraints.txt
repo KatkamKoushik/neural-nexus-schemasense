@@ -5,7 +5,7 @@
 # Core runtime dependencies
 streamlit==1.42.2
 google-genai==2.29.0
-pandas==2.2.3
+pandas==3.0.6
 plotly==6.0.0
 sqlalchemy==2.0.38
 sqlglot==30.22.0
