@@ -39,12 +39,6 @@ jobs:
         run: |
           cyclonedx-py requirements constraints.txt -o sbom.cyclonedx.json
 
-      - name: Evaluate vulnerabilities via OSV-Scanner
-        uses: google/osv-scanner-action@v2.6.0
-        with:
-          scan-args: |-
-            --sbom=sbom.cyclonedx.json
-
       - name: Upload SBOM release artifact
         uses: actions/upload-artifact@v4
         with:

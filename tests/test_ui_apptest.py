@@ -51,8 +51,8 @@ def test_ui_live_connection_and_disconnect():
     at.run()
 
     assert not at.exception
-    assert at.session_state.get("db_engine") is not None
-    assert at.session_state.get("db_schema") is not None
+    assert at.session_state["db_engine"] is not None
+    assert at.session_state["db_schema"] is not None
     assert "customers" in at.session_state.db_schema.tables
     assert at.session_state.privilege_report.is_privileged is False
 
@@ -65,8 +65,8 @@ def test_ui_live_connection_and_disconnect():
     at.run()
 
     assert not at.exception
-    assert at.session_state.get("db_engine") is None
-    assert at.session_state.get("db_schema") is None
+    assert at.session_state["db_engine"] is None
+    assert at.session_state["db_schema"] is None
 
 
 def test_ui_privileged_connection_warning():
@@ -123,7 +123,7 @@ def test_ui_enforce_least_privilege_blocks_admin():
 
     assert not at.exception
     # Engine should NOT be set because connection was rejected
-    assert at.session_state.get("db_engine") is None
+    assert at.session_state["db_engine"] is None
     assert any(
         "Connection Blocked" in msg["content"] for msg in at.session_state.messages
     )
@@ -158,7 +158,7 @@ def test_ui_failed_connection_missing_fields():
     at.run()
 
     assert not at.exception
-    assert at.session_state.get("db_engine") is None
+    assert at.session_state["db_engine"] is None
     assert any(
         "All connection parameters are mandatory" in err.value for err in at.error
     )
