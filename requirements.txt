@@ -1,7 +1,7 @@
 streamlit>=1.39.0
 google-genai>=2.0.0
 pandas>=2.1.0
-plotly>=5.20.0
+plotly>=7.1.0
 sqlalchemy>=2.0.0
 sqlglot>=25.0.0
 pypdf>=5.0.0
