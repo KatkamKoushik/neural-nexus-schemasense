@@ -9,4 +9,4 @@
 # Hardware-accelerated installation (Apple Metal):
 #   CMAKE_ARGS="-DGGML_METAL=on" pip install -r requirements-local.txt
 
-llama-cpp-python>=0.3.0
+llama-cpp-python>=0.3.36
