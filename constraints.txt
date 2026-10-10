@@ -1,0 +1,22 @@
+# Dependency constraints for reproducible builds & pilot deployments
+# Generated & verified for Python 3.10, 3.11, 3.12 compatibility
+# Use with: pip install -r requirements.txt -c constraints.txt
+
+# Core runtime dependencies
+streamlit==1.42.2
+google-genai==2.29.0
+pandas==2.2.3
+plotly==6.0.0
+sqlalchemy==2.0.38
+sqlglot==26.8.0
+pypdf==5.3.1
+psycopg2-binary==2.9.10
+pymysql==1.1.1
+
+# CI & Testing quality gate dependencies
+pytest==8.3.5
+pytest-cov==6.0.0
+ruff==0.9.10
+pip-audit==2.8.0
+cyclonedx-bom==5.1.0
+detect-secrets==1.5.0

@@ -1,0 +1,12 @@
+# Optional dependencies for SchemaSense Local AI Runtime (Milestone 8)
+#
+# Standard CPU installation:
+#   pip install -r requirements-local.txt
+#
+# Hardware-accelerated installation (CUDA):
+#   CMAKE_ARGS="-DGGML_CUDA=on" pip install -r requirements-local.txt
+#
+# Hardware-accelerated installation (Apple Metal):
+#   CMAKE_ARGS="-DGGML_METAL=on" pip install -r requirements-local.txt
+
+llama-cpp-python>=0.3.0
