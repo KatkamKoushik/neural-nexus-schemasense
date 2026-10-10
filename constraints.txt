@@ -3,7 +3,7 @@
 # Use with: pip install -r requirements.txt -c constraints.txt
 
 # Core runtime dependencies
-streamlit==1.42.2
+streamlit==1.65.0
 google-genai==2.29.0
 pandas==2.2.3
 plotly==6.0.0
