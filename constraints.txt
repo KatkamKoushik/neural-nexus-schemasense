@@ -11,7 +11,7 @@ sqlalchemy==2.0.38
 sqlglot==30.22.0
 pypdf==5.3.1
 psycopg2-binary==2.9.10
-pymysql==1.1.1
+pymysql==1.2.3
 
 # CI & Testing quality gate dependencies
 pytest==8.3.5
