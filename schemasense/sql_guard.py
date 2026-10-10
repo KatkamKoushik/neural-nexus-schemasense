@@ -52,23 +52,26 @@ class ValidationResult:
 
 
 # Explicitly forbidden AST expression classes across all dialects
-FORBIDDEN_AST_NODES = (
-    exp.Insert,
-    exp.Update,
-    exp.Delete,
-    exp.Drop,
-    exp.Alter,
-    exp.Create,
-    exp.TruncateTable,
-    exp.Merge,
-    exp.Grant,
-    exp.Revoke,
-    exp.Command,
-    exp.Transaction,
-    exp.Commit,
-    exp.Rollback,
-    exp.Into,
-    exp.Copy,
+_FORBIDDEN_AST_NODE_NAMES = (
+    "Insert",
+    "Update",
+    "Delete",
+    "Drop",
+    "Alter",
+    "Create",
+    "TruncateTable",
+    "Merge",
+    "Grant",
+    "Revoke",
+    "Command",
+    "Transaction",
+    "Commit",
+    "Rollback",
+    "Into",
+    "Copy",
+)
+FORBIDDEN_AST_NODES = tuple(
+    getattr(exp, name) for name in _FORBIDDEN_AST_NODE_NAMES if hasattr(exp, name)
 )
 
 # High-risk functions across PostgreSQL, MySQL, and SQLite

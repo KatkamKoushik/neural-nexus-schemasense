@@ -197,7 +197,7 @@
     },
     {
       "bom-ref": "requirements-L11",
-      "description": "requirements line 11: sqlglot==26.8.0",
+      "description": "requirements line 11: sqlglot==30.22.0",
       "externalReferences": [
         {
           "comment": "implicit dist url",
@@ -206,9 +206,9 @@
         }
       ],
       "name": "sqlglot",
-      "purl": "pkg:pypi/sqlglot@26.8.0",
+      "purl": "pkg:pypi/sqlglot@30.22.0",
       "type": "library",
-      "version": "26.8.0"
+      "version": "30.22.0"
     },
     {
       "bom-ref": "requirements-L6",
@@ -274,7 +274,7 @@
     }
   ],
   "metadata": {
-    "timestamp": "2026-10-10T17:00:53.371480+00:00",
+    "timestamp": "2026-10-10T17:16:20.793971+00:00",
     "tools": {
       "components": [
         {
@@ -378,7 +378,7 @@
       ]
     }
   },
-  "serialNumber": "urn:uuid:731c7771-d35f-414f-9f9c-b3ac6569c9a4",
+  "serialNumber": "urn:uuid:13a17af6-619b-4da4-a8e4-2195b84c410b",
   "version": 1,
   "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
   "bomFormat": "CycloneDX",
