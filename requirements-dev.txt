@@ -1,6 +1,6 @@
 # Development and CI Quality Gate Dependencies
 pytest>=8.0.0
-pytest-cov>=5.0.0
+pytest-cov>=7.1.0
 ruff>=0.5.0
 pip-audit>=2.7.0
 cyclonedx-bom>=5.0.0

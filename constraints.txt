@@ -15,7 +15,7 @@ pymysql==1.1.1
 
 # CI & Testing quality gate dependencies
 pytest==8.3.5
-pytest-cov==6.0.0
+pytest-cov==7.1.0
 ruff==0.9.10
 pip-audit==2.8.0
 cyclonedx-bom==5.1.0
